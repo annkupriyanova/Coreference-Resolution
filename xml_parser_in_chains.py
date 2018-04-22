@@ -4,12 +4,10 @@ import json
 group_str = []
 group_ref = []
 gram_values = []
-lemmas = []
 
 
 def make_item(xml_item):
     global gram_values
-    global lemmas
 
     item = {
         'sh': int(xml_item['@sh']),
@@ -22,8 +20,6 @@ def make_item(xml_item):
         item['head'] = int(xml_item['@head'])
 
         gram_values.append(xml_item['@gram'])
-
-    lemmas.append(xml_item['lem'])
 
     return item
 
@@ -151,27 +147,6 @@ def make_sorted_groups(groups_position):
 
     return groups_position
 
-
-def make_word_index():
-    global lemmas
-
-    word_index = {}
-
-    lemmas = list(set(lemmas))
-
-    for i, lem in enumerate(lemmas):
-        word_index[lem] = i
-
-    size = len(word_index)
-
-    with open('./data/word_index.txt', 'w') as fout:
-        for lem, i in word_index.items():
-            if i == size-1:
-                fout.write(lem + ' ' + str(i))
-            else:
-                fout.write(lem + ' ' + str(i) + '\n')
-
-    return word_index
 
 
 def make_group_index():

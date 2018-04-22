@@ -27,7 +27,7 @@ def get_list_tokens():
     return tokens, tokens_lem
 
 
-def make_word_index(tokens, filename):
+def make_word_index(tokens):
     word_index = {}
 
     for i, tok in enumerate(tokens):
@@ -35,7 +35,7 @@ def make_word_index(tokens, filename):
 
     size = len(word_index)
 
-    with open(filename, 'w') as fout:
+    with open('/output/word_index_lemma.txt', 'w') as fout:
         for tok, i in word_index.items():
             if i == size - 1:
                 fout.write(tok + ' ' + str(i))
@@ -95,7 +95,7 @@ def main():
     _, tokens_lem = get_list_tokens()
     print("Tokens have been collected.")
 
-    word_index = make_word_index(tokens_lem, '/output/word_index_lemma.txt')
+    word_index = make_word_index(tokens_lem)
     print("Word index has been made.")
 
     embedding_matrix = make_pretrained_embeddings(word_index)

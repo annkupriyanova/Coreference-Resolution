@@ -1,3 +1,7 @@
 venv/
-models/
+models/wiki.ru.bin
 RuCorData/
+logs/
+.floydexpt
+.floydignore
+.floyddata
