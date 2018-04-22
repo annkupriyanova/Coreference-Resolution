@@ -5,7 +5,9 @@ from keras.callbacks import TensorBoard
 from sklearn.model_selection import train_test_split
 import sklearn.metrics as metrics
 import numpy as np
+import bcubed
 
+PROB_THRESHOLD = 0.5
 
 dataset_features = np.array([])
 group_index = {}
@@ -28,12 +30,12 @@ class Model:
         self.model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
     def train(self, x_train, y_train, batch_size, epochs):
-        self.model.fit(x_train, y_train, batch_size = batch_size, epochs = epochs)
+        tensorboard = TensorBoard(log_dir='/output/logs', histogram_freq=2, batch_size=100, write_graph=False,
+                                  write_grads=True, write_images=False, embeddings_freq=0,
+                                  embeddings_layer_names=None, embeddings_metadata=None)
+        self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, shuffle=True, callbacks=[tensorboard])
         self.model.save('/output/CRModel.h5')
         self.model.save_weights('/output/CRModel_weights.h5')
-        TensorBoard(log_dir='/output/logs', histogram_freq=2, batch_size=100, write_graph=False,
-                                    write_grads=True, write_images=False, embeddings_freq=0,
-                                    embeddings_layer_names=None, embeddings_metadata=None)
 
     # def train_iterative(self, steps=1000, epochs=5):
     #     self.model.fit_generator(generate_group_pairs(), steps_per_epoch=steps, epochs=epochs)
@@ -43,7 +45,7 @@ class Model:
 
     def estimate_metrics(self, x_test, y_test):
         labels_pred = self.predict(x_test)
-        labels_pred = (labels_pred > 0.5)
+        labels_pred = (labels_pred > PROB_THRESHOLD)
 
         print('Labels predicted: ', str(labels_pred))
 
@@ -52,6 +54,23 @@ class Model:
 
         print('Accuracy is ' + str(accuracy))
         print('Metrics (precision, recall, f score, support) is ' + str(metric))
+
+    def bcubed(self, x_test, y_test):
+        ldict = {}
+        cdict = {}
+
+        labels_pred = self.predict(x_test)
+        labels_pred = (labels_pred > PROB_THRESHOLD)
+
+        for i, label in enumerate(y_test):
+            ldict[i] = {int(label)}
+            cdict[i] = {int(labels_pred[i])}
+
+        precision = bcubed.precision(cdict, ldict)
+        recall = bcubed.recall(cdict, ldict)
+        fscore = bcubed.fscore(precision, recall)
+
+        print('B-cubed metric:\nPrecision = {}\nRecall = {}\nF-score = {}'.format(precision, recall, fscore))
 
 
 def fillin_global_variables():
@@ -92,7 +111,6 @@ def get_dataset_entry(line):
 
 
 def generate_full_dataset():
-
     dataset = []
 
     fillin_global_variables()
@@ -124,11 +142,10 @@ def preprocess_dataset(dataset):
     data = dataset[:, :-1]
     labels = dataset[:, -1]
 
-    return train_test_split(data, labels, test_size=0.2)
+    return train_test_split(data, labels, test_size=0.3)
 
 
 def pipeline():
-
     dataset = generate_full_dataset()
     print('Dataset is generated.')
     data_train, data_test, labels_train, labels_test = preprocess_dataset(dataset)
@@ -145,47 +162,63 @@ def pipeline():
     model.train(data_train, labels_train, batch_size, epochs)
     print('Training is finished.')
 
-    print('ESTIMATE MODEL')
-    model.estimate_metrics(data_test, labels_test)
+    np.save('/output/data_test.npy', np.c_[data_test, labels_test])
 
 
-def play_with_model(data_test, labels_test):
-    # data_train, data_test, labels_train, labels_test = preprocess_dataset()
-    # print('Dataset is preprocessed.')
-
-    model = Model('./models/CRModel.h5')
+def evaluate_model():
+    # Download from Floyd datasets through /data/ folder
+    model = Model('/data/CRModel.h5')
     print('Model is downloaded.')
 
+    dataset = np.load('/data/data_test.npy')
+
+    np.random.shuffle(dataset)
+    data_test = dataset[:, :-1]
+    labels_test = dataset[:, -1]
+    print('Dataset for testing is ready.')
+
+    print('ESTIMATE MODEL')
     model.estimate_metrics(data_test, labels_test)
+    model.bcubed(data_test, labels_test)
 
 
-def load_vocabs():
-    word_index = {}
-    with open('./data/word_index_lemma.txt', 'r') as fin:
-        for line in fin:
-            line = line.split()
-            word_index[line[0]] = int(line[1])
-
-    embedding_matrix = np.load('./data/embedding_matrix_lemma.npy')
-
-    return word_index, embedding_matrix
+# def play_with_model(data_test, labels_test):
+#     # data_train, data_test, labels_train, labels_test = preprocess_dataset()
+#     # print('Dataset is preprocessed.')
+#
+#     model = Model('./models/CRModel.h5')
+#     print('Model is downloaded.')
+#
+#     model.estimate_metrics(data_test, labels_test)
+#
+#
+# def load_vocabs():
+#     word_index = {}
+#     with open('./data/word_index_lemma.txt', 'r') as fin:
+#         for line in fin:
+#             line = line.split()
+#             word_index[line[0]] = int(line[1])
+#
+#     embedding_matrix = np.load('./data/embedding_matrix_lemma.npy')
+#
+#     return word_index, embedding_matrix
 
 def main():
-    wi, em = load_vocabs()
-    m1 = em[wi['мужчина']]
-    m2 = em[wi['он']]
-    m3 = em[wi['она']]
-    pair1 = np.concatenate((m1, m1, m2, m2, [1]))
-    pair2 = np.concatenate((m1, m1, m3, m3, [0]))
-    pair3 = np.concatenate((m2, m2, m3, m3, [0]))
-    dataset = np.vstack((pair1, pair2, pair3))
-    data = dataset[:, :-1]
-    labels = dataset[:, -1]
-
-    play_with_model(data, labels)
+    # wi, em = load_vocabs()
+    # m1 = em[wi['путин']]
+    # m2 = em[wi['она']]
+    # m3 = em[wi['президент']]
+    # pair1 = np.concatenate((m1, m1, m2, m2, [1]))
+    # pair2 = np.concatenate((m1, m1, m3, m3, [1]))
+    # pair3 = np.concatenate((m2, m2, m3, m3, [1]))
+    # dataset = np.vstack((pair1, pair2, pair3))
+    # data = dataset[:, :-1]
+    # labels = dataset[:, -1]
+    #
+    # play_with_model(data, labels)
 
     # pipeline()
-
+    evaluate_model()
 
 
 if __name__ == '__main__':
