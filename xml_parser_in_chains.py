@@ -90,7 +90,7 @@ def parse_groups_xml(xml_file):
                 group = make_group(chn['group'])
                 chain['groups'].append(group)
 
-                groups_position[doc_id].append((group['group_id'], chain['chain_id'], group['sh']))
+                groups_position[doc_id].append((group['group_id'], chain['chain_id'], group['sh'], group['content']))
 
             # chn['group'] is a list of dictionaries
             else:
@@ -98,7 +98,7 @@ def parse_groups_xml(xml_file):
                     group = make_group(grp)
                     chain['groups'].append(group)
 
-                    groups_position[doc_id].append((group['group_id'], chain['chain_id'], group['sh']))
+                    groups_position[doc_id].append((group['group_id'], chain['chain_id'], group['sh'], group['content']))
 
             groups_dict[doc_id].append(chain)
 
@@ -143,7 +143,7 @@ def make_sorted_groups(groups_position):
         groups_position[doc_id] = sorted(groups_position[doc_id], key=lambda tup: tup[2])
 
     with open('./data/sorted_groups.json', 'w') as fout:
-        json.dump(groups_position, fout)
+        json.dump(groups_position, fout, ensure_ascii=False)
 
     return groups_position
 
