@@ -12,11 +12,21 @@ def get_list_tokens():
         _ = fin.readline()
 
         for line in fin:
-            tok = line.split('\t')[3]
-            lem = line.split('\t')[4]
-            if tok.isalnum():
-                tokens.append(tok)
+            values = line.split('\t')
+            tok = values[3]
+            lem = values[4]
+            if values[5] == 'SENT\n':
+                tok = ''.join(c for c in tok if c.isalpha())
+                lem = ''.join(c for c in lem if c.isalpha())
+                if lem != '':
+                    tokens_lem.append(lem)
+                if tok != '':
+                    tokens.append(tok)
+
+            elif lem.isalpha():
                 tokens_lem.append(lem)
+            elif tok.isalpha():
+                tokens.append(tok)
 
     tokens = list(set(tokens))
     tokens_lem = list(set(tokens_lem))
@@ -71,24 +81,25 @@ def get_word_index(filename):
     return word_index
 
 
-# def check_zero_vecs():
-#
-#     word_index = get_word_index('./data/word_index_lemma.txt')
-#     embedding_matrix = np.load('./data/embedding_matrix_lemma.npy')
-#
-#     print("Check if embedding_matrix has zero vectors. Zero tokens: ")
-#     ind = []
-#     for i, vec in enumerate(embedding_matrix):
-#         all_zeros = not np.any(vec)
-#         if all_zeros:
-#             ind.append(i)
-#
-#     if not ind:
-#         print("No empty vectors!")
-#
-#     for i in ind:
-#         tok = next((t for t in word_index if word_index[t] == i), None)
-#         print(tok)
+def check_zero_vecs(word_index=None, embedding_matrix=None):
+
+    word_index = get_word_index('./data/word_index_lemma.txt')
+    embedding_matrix = np.load('./data/embedding_matrix_lemma.npy')
+
+    print("Check if embedding_matrix has zero vectors. Zero tokens: ")
+    ind = []
+    for i, vec in enumerate(embedding_matrix):
+        all_zeros = not np.any(vec)
+        if all_zeros:
+            ind.append(i)
+
+    if not ind:
+        print("No empty vectors!")
+    else:
+        print("Tokens with zero embeddings:")
+        for i in ind:
+            tok = next((t for t in word_index if word_index[t] == i), None)
+            print(tok)
 
 
 def main():

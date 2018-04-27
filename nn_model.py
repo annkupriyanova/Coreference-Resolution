@@ -21,7 +21,7 @@ class Model:
             self.model = load_model(filepath)
 
     def set(self):
-        self.model.add(Dense(units=256, init='uniform', activation='relu', input_dim=1200))
+        self.model.add(Dense(units=256, init='uniform', activation='relu', input_dim=1800))
         self.model.add(Dense(units=128, init='uniform', activation='relu'))
         self.model.add(Dense(units=64, init='uniform', activation='relu'))
         self.model.add(Dense(units=32, init='uniform'))
@@ -83,7 +83,7 @@ def fillin_global_variables():
     with open('./data/group_index.txt', 'r') as fin:
         for line in fin:
             line = line.split()
-            group_index[int(line[0])] = int(line[1])
+            group_index[int(line[0])] = [int(line[1]), int(line[2])]
 
 
 def get_dataset_entry(line):
@@ -92,7 +92,7 @@ def get_dataset_entry(line):
     id2 = values[1]
     label = [values[2]]
 
-    entry = np.concatenate((dataset_features[group_index[id1]], dataset_features[group_index[id2]], label))
+    entry = np.concatenate((dataset_features[group_index[id1][0]], dataset_features[group_index[id2][0]], label))
 
     # Add pair features later
     # ...
@@ -161,16 +161,18 @@ def pipeline():
     print('Model is compiled. Start training.')
     model.train(data_train, labels_train, batch_size, epochs)
     print('Training is finished.')
+    model.estimate_metrics(data_test, labels_test)
 
     np.save('/output/data_test.npy', np.c_[data_test, labels_test])
 
 
-def evaluate_model():
+def evaluate_model(test_size):
     # Download from Floyd datasets through /data/ folder
     model = Model('/data/CRModel.h5')
     print('Model is downloaded.')
 
     dataset = np.load('/data/data_test.npy')
+    dataset = dataset[:test_size]
 
     np.random.shuffle(dataset)
     data_test = dataset[:, :-1]
@@ -218,7 +220,7 @@ def main():
     # play_with_model(data, labels)
 
     # pipeline()
-    evaluate_model()
+    evaluate_model(10000)
 
 
 if __name__ == '__main__':

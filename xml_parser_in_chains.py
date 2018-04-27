@@ -98,7 +98,8 @@ def parse_groups_xml(xml_file):
                     group = make_group(grp)
                     chain['groups'].append(group)
 
-                    groups_position[doc_id].append((group['group_id'], chain['chain_id'], group['sh'], group['content']))
+                    groups_position[doc_id].append(
+                        (group['group_id'], chain['chain_id'], group['sh'], group['content']))
 
             groups_dict[doc_id].append(chain)
 
@@ -138,6 +139,7 @@ def make_gram_values():
 
     return gram_values
 
+
 def make_sorted_groups(groups_position):
     for doc_id in groups_position:
         groups_position[doc_id] = sorted(groups_position[doc_id], key=lambda tup: tup[2])
@@ -146,7 +148,6 @@ def make_sorted_groups(groups_position):
         json.dump(groups_position, fout, ensure_ascii=False)
 
     return groups_position
-
 
 
 def make_group_index():
@@ -158,26 +159,27 @@ def make_group_index():
     for _, groups in sorted_groups.items():
         k = len(group_index)
         for i, grp in enumerate(groups):
-            group_index[grp[0]] = i + k
+            group_index[grp[0]] = [i + k, -1]
 
     size = len(group_index)
 
     with open('./data/group_index.txt', 'w') as fout:
         for grp_id, i in group_index.items():
-            if i == size-1:
-                fout.write("{} {}".format(grp_id, i))
-            else:
-                fout.write("{} {}\n".format(grp_id, i))
+            # if i == size-1:
+            #     fout.write("{} {} {}".format(grp_id, i[0], i[1]))
+            # else:
+            fout.write("{} {} {}\n".format(grp_id, i[0], i[1]))
 
     return group_index
 
 
 def main():
-    _, groups_position = parse_groups_xml('./RuCorData/groups.xml')
+    # _, groups_position = parse_groups_xml('./RuCorData/groups.xml')
     # print(make_group_types())
     # print(make_gram_values())
-    print(make_sorted_groups(groups_position))
+    # print(make_sorted_groups(groups_position))
     # make_word_index()
+    make_group_index()
 
 
 if __name__ == "__main__":

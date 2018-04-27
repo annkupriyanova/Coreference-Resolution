@@ -6,3 +6,6 @@ logs/
 .floydexpt
 .floydignore
 .floyddata
+
+run_parser.py
+data/dataset/
