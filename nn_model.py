@@ -1,47 +1,78 @@
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Dropout
+from keras.optimizers import RMSprop, Adam
+from keras.constraints import maxnorm
 from keras.models import load_model
+from keras import backend as K
 from keras.callbacks import TensorBoard
 from sklearn.model_selection import train_test_split
 import sklearn.metrics as metrics
 import numpy as np
+# import matplotlib.pyplot as plt
 import bcubed
+# from generate_full_dataset import generate_full_dataset
 
-PROB_THRESHOLD = 0.5
+PROB_THRESHOLD = 0.7
 
-dataset_features = np.array([])
-group_index = {}
 
 
 class Model:
-    def __init__(self, filepath=None):
-        if not filepath:
-            self.model = Sequential()
+    def __init__(self, mode='pretrain', filepath=None):
+        self.mode = mode
+
+        if mode == 'test':
+            self.model = load_model(filepath, custom_objects={'max_margin_loss': max_margin_loss})
         else:
-            self.model = load_model(filepath)
+            self.model = self.set()
+            if mode == 'train':
+                self.model.load_weights(filepath)
+            self.compile()
+
 
     def set(self):
-        self.model.add(Dense(units=256, init='uniform', activation='relu', input_dim=1800))
-        self.model.add(Dense(units=128, init='uniform', activation='relu'))
-        self.model.add(Dense(units=64, init='uniform', activation='relu'))
-        self.model.add(Dense(units=32, init='uniform'))
-        self.model.add(Dense(units=1, activation='sigmoid'))
+        model = Sequential()
+        # model.add(Dropout(0.3, input_shape=(1234,))) # makes loss worse
+        model.add(Dense(units=500, kernel_initializer='normal', activation='relu', input_dim=1234, kernel_constraint=maxnorm(3)))
+        # model.add(Dense(units=1000, kernel_initializer='normal', activation='relu', kernel_constraint=maxnorm(3)))
+        model.add(Dropout(0.3))
+        model.add(Dense(units=250, kernel_initializer='normal', activation='relu'))
+        model.add(Dropout(0.3))
+        model.add(Dense(units=100, kernel_initializer='normal', activation='relu', kernel_constraint=maxnorm(3)))
+        model.add(Dropout(0.3))
+        model.add(Dense(units=1, kernel_initializer='normal', activation='sigmoid'))
 
-        self.model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        return model
+
+    def compile(self):
+        optimizer = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-07, decay=0.0)
+        loss = 'binary_crossentropy'
+
+        if self.mode == 'train':
+            optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-07, decay=0.0)
+            loss = max_margin_loss
+
+        self.model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
+        print('Model is compiled. Start training.')
 
     def train(self, x_train, y_train, batch_size, epochs):
-        tensorboard = TensorBoard(log_dir='/output/logs', histogram_freq=2, batch_size=100, write_graph=False,
-                                  write_grads=True, write_images=False, embeddings_freq=0,
-                                  embeddings_layer_names=None, embeddings_metadata=None)
-        self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, shuffle=True, callbacks=[tensorboard])
-        self.model.save('/output/CRModel.h5')
-        self.model.save_weights('/output/CRModel_weights.h5')
+        # tensorboard = TensorBoard(log_dir='/output/logs', histogram_freq=2, batch_size=100, write_graph=False,
+        #                           write_grads=True, write_images=False, embeddings_freq=0,
+        #                           embeddings_layer_names=None, embeddings_metadata=None)
+        history = self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,
+                                 validation_split=0.2, shuffle=True,  verbose=2)
 
-    # def train_iterative(self, steps=1000, epochs=5):
-    #     self.model.fit_generator(generate_group_pairs(), steps_per_epoch=steps, epochs=epochs)
+        if self.mode == 'pretrain':
+            self.model.save('/output/CRModel.h5')
+            self.model.save_weights('/output/CRModel_weights.h5')
+        else:
+            self.model.save('/output/CRModel_final.h5')
 
     def predict(self, x_test):
         return self.model.predict(x_test)
+
+    # Computes the loss on test data
+    def evaluate(self, x_test, y_test):
+        return self.model.evaluate(x_test, y_test)
 
     def estimate_metrics(self, x_test, y_test):
         labels_pred = self.predict(x_test)
@@ -73,57 +104,20 @@ class Model:
         print('B-cubed metric:\nPrecision = {}\nRecall = {}\nF-score = {}'.format(precision, recall, fscore))
 
 
-def fillin_global_variables():
-    global dataset_features
-    global group_index
+def max_margin_loss(y_true, y_pred):
+    penalty = 1.0
 
-    # from Floyd /dataset/
-    dataset_features = np.load('/dataset/dataset_mention_features.npy')
+    true_scores = y_true * y_pred
+    highest_true_score = K.max(true_scores)
+    penalties = penalty * (1 - y_true)
 
-    with open('./data/group_index.txt', 'r') as fin:
-        for line in fin:
-            line = line.split()
-            group_index[int(line[0])] = [int(line[1]), int(line[2])]
+    # true_antec_i = [i for i, label in enumerate(y_true) if label == 1]
+    # high_score_true_antec = np.max(y_pred[true_antec_i])
+    # penalties = [0 if y == 1 else penalty for y in y_true]
+    # losses = penalties * (1 + y_pred - highest_true_score)
+    # losses = np.asarray(losses)
 
-
-def get_dataset_entry(line):
-    values = [int(val) for val in line.split()]
-    id1 = values[0]
-    id2 = values[1]
-    label = [values[2]]
-
-    entry = np.concatenate((dataset_features[group_index[id1][0]], dataset_features[group_index[id2][0]], label))
-
-    # Add pair features later
-    # ...
-
-    return entry
-
-
-# def generate_group_pairs():
-#     while True:
-#         with open('./data/dataset_pair.txt', 'r') as fin:
-#             for line in fin:
-#                 # create Numpy arrays of input data
-#                 # and labels, from each line in the file
-#                 data, label = process_line(line)
-#                 yield (data, label)
-
-
-def generate_full_dataset():
-    dataset = []
-
-    fillin_global_variables()
-
-    # generate dataset for training and testing
-    with open('./data/dataset_pair.txt', 'r') as fin:
-        for line in fin:
-            entry = get_dataset_entry(line)
-            dataset.append(entry)
-
-    dataset = np.array(dataset)
-
-    return dataset
+    return K.max(penalties * (1 + y_pred - highest_true_score))
 
 
 def preprocess_dataset(dataset):
@@ -131,47 +125,42 @@ def preprocess_dataset(dataset):
     Load, shuffle and split dataset into train and test ones.
     :return:
     """
-    # dataset_pair = np.load('./data/dataset/dataset_pair.npy')
-    # np.random.shuffle(dataset_pair)
-    #
-    # data = dataset_pair[:, :-1]
-    # labels = dataset_pair[:, -1]
-
     np.random.shuffle(dataset)
 
     data = dataset[:, :-1]
     labels = dataset[:, -1]
 
-    return train_test_split(data, labels, test_size=0.3)
+    return train_test_split(data, labels, test_size=0.2)
 
 
-def pipeline():
-    dataset = generate_full_dataset()
-    print('Dataset is generated.')
+def pipeline(batch_size, epochs, mode='pretrain', filepath=None):
+    # dataset = generate_full_dataset()
+    # print('Dataset is generated.')
+    dataset = np.load('/dataset/full_dataset_no_duplicates.npy')
+    print('Dataset is loaded.')
+
     data_train, data_test, labels_train, labels_test = preprocess_dataset(dataset)
     print('Dataset is preprocessed.')
 
     # del dataset
 
-    batch_size = 1000
-    epochs = 10
-
-    model = Model()
-    model.set()
-    print('Model is compiled. Start training.')
+    model = Model(mode=mode, filepath=filepath)
     model.train(data_train, labels_train, batch_size, epochs)
-    print('Training is finished.')
+
+    # print('Built-in evaluation:')
+    # model.evaluate(data_test, labels_test)
+    print('Evaluation:')
     model.estimate_metrics(data_test, labels_test)
 
-    np.save('/output/data_test.npy', np.c_[data_test, labels_test])
+    # np.save('/output/data_test.npy', np.c_[data_test, labels_test])
 
 
 def evaluate_model(test_size):
     # Download from Floyd datasets through /data/ folder
-    model = Model('/data/CRModel.h5')
+    model = Model('/dataset/CRModel.h5')
     print('Model is downloaded.')
 
-    dataset = np.load('/data/data_test.npy')
+    dataset = np.load('/dataset/data_test.npy')
     dataset = dataset[:test_size]
 
     np.random.shuffle(dataset)
@@ -184,43 +173,24 @@ def evaluate_model(test_size):
     model.bcubed(data_test, labels_test)
 
 
-# def play_with_model(data_test, labels_test):
-#     # data_train, data_test, labels_train, labels_test = preprocess_dataset()
-#     # print('Dataset is preprocessed.')
-#
-#     model = Model('./models/CRModel.h5')
-#     print('Model is downloaded.')
-#
-#     model.estimate_metrics(data_test, labels_test)
-#
-#
-# def load_vocabs():
-#     word_index = {}
-#     with open('./data/word_index_lemma.txt', 'r') as fin:
-#         for line in fin:
-#             line = line.split()
-#             word_index[line[0]] = int(line[1])
-#
-#     embedding_matrix = np.load('./data/embedding_matrix_lemma.npy')
-#
-#     return word_index, embedding_matrix
+# def plot_history(self, history):
+#     plt.plot(history.history['loss'])
+#     plt.plot(history.history['val_loss'])
+#     plt.title('model loss')
+#     plt.ylabel('loss')
+#     plt.xlabel('epoch')
+#     plt.legend(['train', 'validation'], loc='upper left')
+#     plt.show()
+
 
 def main():
-    # wi, em = load_vocabs()
-    # m1 = em[wi['путин']]
-    # m2 = em[wi['она']]
-    # m3 = em[wi['президент']]
-    # pair1 = np.concatenate((m1, m1, m2, m2, [1]))
-    # pair2 = np.concatenate((m1, m1, m3, m3, [1]))
-    # pair3 = np.concatenate((m2, m2, m3, m3, [1]))
-    # dataset = np.vstack((pair1, pair2, pair3))
-    # data = dataset[:, :-1]
-    # labels = dataset[:, -1]
-    #
-    # play_with_model(data, labels)
+    # Pre-training
+    # pipeline(batch_size=100, epochs=20)
 
-    # pipeline()
-    evaluate_model(10000)
+    # Training with max-margin loss
+    pipeline(batch_size=100, epochs=20, mode='train', filepath='crmodel_weights.h5')
+
+    # evaluate_model(30000)
 
 
 if __name__ == '__main__':
