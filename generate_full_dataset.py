@@ -1,4 +1,6 @@
 import numpy as np
+from operator import itemgetter
+
 
 dataset_features = np.array([])
 group_index = {}
@@ -21,11 +23,10 @@ def get_dataset_entry(line):
     id1 = values[0]
     id2 = values[1]
     label = [values[2]]
+    pair_features = np.array(values[3:])
 
-    entry = np.concatenate((dataset_features[group_index[id1][0]], dataset_features[group_index[id2][0]], label))
-
-    # Add pair features later
-    # ...
+    # entry = np.concatenate((dataset_features[group_index[id1][0]], dataset_features[group_index[id2][0]], label))
+    entry = np.concatenate((dataset_features[group_index[id1][0]], dataset_features[group_index[id2][0]], pair_features, label, [id2]))
 
     return entry
 
@@ -36,7 +37,8 @@ def generate_full_dataset():
     fillin_global_variables()
 
     # generate dataset for training and testing
-    with open('./data/dataset_pair.txt', 'r') as fin:
+    # with open('./data/dataset_pair_with_features.txt', 'r') as fin:
+    with open('./data/dataset_pair_sorted.txt', 'r') as fin:
         for line in fin:
             entry = get_dataset_entry(line)
             dataset.append(entry)
@@ -47,6 +49,8 @@ def generate_full_dataset():
     # delete duplicates
     dataset = delete_conradictions(dataset)
     print("Without duplicates and contradictions: {}".format(dataset.shape))
+
+    dataset = sorted(dataset, key=itemgetter(-1))
 
     return dataset
 
@@ -71,21 +75,19 @@ def delete_conradictions(dataset):
 
 
 # def main():
-#     a = np.array([1.2, 0.4, 6.7])
-#     i = [0, 2]
+#     a = np.array([[1.2, 0.4, 6.7], [0, 1, 3]])
+#     a = sorted(a, key=itemgetter(-1))
 #
-#     a_new = a[i]
-#
-#     print(a_new)
-#     print(type(a_new))
-#     print(np.max(a_new))
+#     print(a)
 
-def save_full_dataset():
+
+def save_full_dataset(filepath):
 
     dataset = generate_full_dataset()
 
-    np.save('/output/full_dataset_no_duplicates.npy', dataset)
+    np.save(filepath, dataset)
 
 
 if __name__ == '__main__':
-    save_full_dataset()
+    save_full_dataset('/output/full_dataset_no_duplicates.npy')
+    # main()

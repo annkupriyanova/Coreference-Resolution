@@ -110,27 +110,27 @@ def get_neg_pair_features(group1, group2, doc_id):
     return np.r_[str_features, dist_features]
 
 
-def sord_pair_dataset_by_mention():
+def sort_pair_dataset_by_mention(filename, key_num):
     dataset = []
 
-    with open('./data/dataset_pair.txt', 'r') as fin:
+    with open(filename, 'r') as fin:
         for line in fin:
             entry = [int(val) for val in line.split()]
             dataset.append(entry)
 
-    dataset = sorted(dataset, key=itemgetter(1))
+    dataset = sorted(dataset, key=itemgetter(key_num))
 
     with open('./data/dataset_pair_sorted.txt', 'w') as fout:
         for entry in dataset:
-            fout.write('{} {} {}\n'.format(entry[0], entry[1], entry[2]))
+            fout.write(' '.join(map(lambda e: str(e), entry)) + '\n')
 
     return dataset
 
 
 def main():
 
-    create_pair_dataset()
-    # sord_pair_dataset_by_mention()
+    # create_pair_dataset()
+    sort_pair_dataset_by_mention('./data/dataset_pair_with_features.txt', 1)
 
 
 if __name__ == '__main__':
