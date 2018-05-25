@@ -115,6 +115,31 @@ class Model:
 
         print('B-cubed metric:\nPrecision = {}\nRecall = {}\nF-score = {}'.format(precision, recall, fscore))
 
+def auc(labels, predictions):
+    print('labels: {}'.format(labels[:, 0]))
+    print('predictions: {}'.format(predictions))
+    return tf.metrics.auc(labels[:, 0], predictions)
+
+def precision_at_thresholds(labels, predictions):
+    return tf.metrics.precision_at_thresholds(labels[:, 0], predictions, thresholds=[0.3, 0.5, 0.7])
+
+
+# def b_cubed(y_true, y_pred):
+#     ldict = {}
+#     cdict = {}
+#
+#     y_predicted = K.less(PROB_THRESHOLD, y_pred)
+#     print('y_predicted: {}'.format(y_predicted))
+#
+#     for i, label in enumerate(y_true):
+#         ldict[i] = {int(label)}
+#         cdict[i] = {int(y_predicted[i])}
+#
+#     precision = bcubed.precision(cdict, ldict)
+#     recall = bcubed.recall(cdict, ldict)
+#     fscore = bcubed.fscore(precision, recall)
+#
+#     return fscore
 
 # LOSS FUNCTION
 

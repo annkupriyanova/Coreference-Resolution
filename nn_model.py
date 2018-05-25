@@ -14,7 +14,7 @@ import bcubed
 
 # from generate_full_dataset import generate_full_dataset
 
-PROB_THRESHOLD = 0.7
+PROB_THRESHOLD = 0.5
 
 
 class Model:
@@ -42,10 +42,6 @@ class Model:
         model.add(Dropout(0.3))
         model.add(Dense(units=1, kernel_initializer='normal', activation='sigmoid'))
 
-        if self.mode == 'train':
-            dummy = tf.expand_dims(tf.constant([0.]), 0)
-            model.add(Lambda(lambda x: tf.stack([x, dummy])))
-
         return model
 
     def compile(self):
@@ -53,7 +49,7 @@ class Model:
         loss = 'binary_crossentropy'
 
         if self.mode == 'train':
-            optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-07, decay=0.0)
+            # optimizer = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-07, decay=0.0)
             loss = max_margin_loss
 
         self.model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
@@ -64,7 +60,7 @@ class Model:
         #                           write_grads=True, write_images=False, embeddings_freq=0,
         #                           embeddings_layer_names=None, embeddings_metadata=None)
         history = self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,
-                                 validation_split=0.2, shuffle=True, verbose=2)
+                                 validation_split=0.2, shuffle=False, verbose=2)
 
         if self.mode == 'pretrain':
             self.model.save('/output/CRModel.h5')
@@ -87,9 +83,11 @@ class Model:
 
         accuracy = metrics.accuracy_score(y_test, labels_pred)
         metric = metrics.precision_recall_fscore_support(y_test, labels_pred)
+        auc = metrics.roc_auc_score(y_test, labels_pred)
 
         print('Accuracy is ' + str(accuracy))
         print('Metrics (precision, recall, f score, support) is ' + str(metric))
+        print('AUC is {}'.format(auc))
 
     def bcubed(self, x_test, y_test):
         ldict = {}
@@ -108,66 +106,68 @@ class Model:
 
         print('B-cubed metric:\nPrecision = {}\nRecall = {}\nF-score = {}'.format(precision, recall, fscore))
 
+# METRICS
+
+def auc(labels, predictions):
+    print('labels: {}'.format(labels))
+    print('predictions: {}'.format(predictions))
+    return tf.metrics.auc(labels, predictions)
+
+def precision_at_thresholds(labels, predictions):
+    return tf.metrics.precision_at_thresholds(labels, predictions, thresholds=[0.3, 0.5, 0.7])
+
 
 # LOSS FUNCTION
 
 def max_margin_loss(y_true, y_pred):
-
     k = tf.shape(y_true)[0]
 
     mentions_sorted, indices_sorted = tf.nn.top_k(y_true[:, 1], k, sorted=True)
 
     labels_sorted = K.gather(y_true[:, 0], indices_sorted)
-    scores_sorted = K.gather(y_pred[:, 0], indices_sorted)
 
-    # true_scores = y_true * y_pred
-    # highest_true_score = K.max(true_scores)
-    # penalties = penalty * (1 - y_true)
-    # return K.max(penalties * (1 + y_pred - highest_true_score))
+    scores_sorted = K.gather(y_pred[:, 0], indices_sorted)
 
     return max_margin(labels_sorted, mentions_sorted, scores_sorted)
 
 
 def max_margin(labels, mentions, scores):
     batch = 100
-    current_mention = mentions[0]
-    labels_to_process = []
-    pred_to_process = []
-    loss = []
 
-    def same(label, score):
-        labels_to_process.append(label)
-        pred_to_process.append(score)
-        return K.constant(0.)
+    def different(start, end):
+        indices = tf.range(start, end, delta=1)
+        # indices = tf.Print(indices, [tf.gather(mentions, indices)], 'indices: ', first_n=50, summarize=40)
+        labels_to_process = tf.gather(labels, indices)
+        predictions_to_process = tf.gather(scores, indices)
 
-    def different():
-        nonlocal labels_to_process
-        nonlocal pred_to_process
+        return process_antecedents(labels_to_process, predictions_to_process)
 
-        labels = tf.stack(labels_to_process)
-        predictions = tf.stack(pred_to_process)
+    def mention_group_loss(i, prev_mention, i_start):
+        condition = tf.equal(tf.gather(mentions, i), prev_mention)
+        m_loss = tf.cond(condition, lambda: K.constant(0.), lambda: different(i_start, i))
 
-        labels_to_process = []
-        pred_to_process = []
+        return m_loss
 
-        return process_antecedents(labels, predictions)
+    def set_i_start(i, prev_mention, i_start):
+        condition = tf.equal(tf.gather(mentions, i), prev_mention)
 
-    labels_arr = tf.unstack(labels, num=batch)
-    mentions_arr = tf.unstack(mentions, num=batch)
-    scores_arr = tf.unstack(scores, num=batch)
+        return tf.cond(condition, lambda: i_start, lambda: i)
 
+    i0 = tf.constant(0)
+    prev_mention0 = tf.gather(mentions, i0)
+    i_start0 = tf.constant(0)
+    loss0 = tf.constant(0.)
 
-    for i, mention in enumerate(mentions_arr):
-        # columns_true = tf.unstack(r)
-        # columns_pred = tf.unstack(rows_pred[i])
+    c = lambda i, prev_mention, i_start, loss: tf.less(i, batch)
+    b = lambda i, prev_mention, i_start, loss: [i + 1,
+                                                tf.gather(mentions, i),
+                                                set_i_start(i, prev_mention, i_start),
+                                                loss + mention_group_loss(i, prev_mention, i_start)]
 
-        label = labels_arr[i]
-        score = scores_arr[i]
+    loop = tf.while_loop(c, b, [i0, prev_mention0, i_start0, loss0], name='while_loop')
+    loss = loop[3]
 
-        loss.append(tf.cond(tf.equal(mention, current_mention), lambda: same(label, score), lambda: different()))
-        current_mention = mention
-
-    return K.sum(loss)
+    return loss
 
 
 def process_antecedents(labels, predictions):
@@ -195,7 +195,7 @@ def preprocess_dataset(dataset, mode):
     else:
         labels = dataset[:, -2:]
 
-    return train_test_split(data, labels, test_size=0.2)
+    return train_test_split(data, labels, test_size=0.2, shuffle=False)
 
 
 def pipeline(batch_size, epochs, mode='pretrain', filepath=None):
@@ -215,14 +215,17 @@ def pipeline(batch_size, epochs, mode='pretrain', filepath=None):
     # print('Built-in evaluation:')
     # model.evaluate(data_test, labels_test)
     print('Evaluation:')
-    model.estimate_metrics(data_test, labels_test)
+    if mode == 'train':
+        model.estimate_metrics(data_test, labels_test[:, 0])
+    else:
+        model.estimate_metrics(data_test, labels_test)
 
     np.save('/output/data_test.npy', np.c_[data_test, labels_test])
 
 
 def evaluate_model(test_size=None):
     # Download from Floyd datasets through /data/ folder
-    model = Model('/dataset/CRModel.h5')
+    model = Model(mode='test', filepath='/dataset/CRModel_final.h5')
     print('Model is downloaded.')
 
     dataset = np.load('/dataset/data_test.npy')
@@ -230,8 +233,8 @@ def evaluate_model(test_size=None):
         dataset = dataset[:test_size]
 
     np.random.shuffle(dataset)
-    data_test = dataset[:, :-1]
-    labels_test = dataset[:, -1]
+    data_test = dataset[:, :-2]
+    labels_test = dataset[:, -2]
     print('Dataset for testing is ready.')
 
     print('ESTIMATE MODEL')
@@ -239,22 +242,12 @@ def evaluate_model(test_size=None):
     model.bcubed(data_test, labels_test)
 
 
-# def plot_history(self, history):
-#     plt.plot(history.history['loss'])
-#     plt.plot(history.history['val_loss'])
-#     plt.title('model loss')
-#     plt.ylabel('loss')
-#     plt.xlabel('epoch')
-#     plt.legend(['train', 'validation'], loc='upper left')
-#     plt.show()
-
-
 def main():
     # Pre-training
-    pipeline(batch_size=100, epochs=20)
+    # pipeline(batch_size=100, epochs=20)
 
     # Training with max-margin loss
-    # pipeline(batch_size=100, epochs=20, mode='train', filepath='CRModel_weights.h5')
+    pipeline(batch_size=100, epochs=20, mode='train', filepath='CRModel_weights.h5')
 
     # evaluate_model()
 
