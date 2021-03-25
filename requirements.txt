@@ -153,7 +153,7 @@ python-dateutil==2.6.0
 python-mimeparse==1.6.0
 pytz==2018.4
 PyWavelets==0.5.2
-PyYAML==3.12
+PyYAML==5.4
 pyzmq==16.0.2
 QtAwesome==0.4.4
 qtconsole==4.3.0
