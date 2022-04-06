@@ -108,7 +108,7 @@ networkx==1.11
 neuralcoref==0.1
 nltk==3.4.5
 nose==1.3.7
-notebook==5.7.8
+notebook==6.4.10
 numba==0.33.0+0.ge79330a.dirty
 numexpr==2.6.2
 numpy==1.12.1
