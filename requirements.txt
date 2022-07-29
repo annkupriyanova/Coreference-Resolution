@@ -94,7 +94,7 @@ Markdown==2.6.11
 MarkupSafe==0.23
 marshmallow==2.15.0
 matplotlib==2.0.2
-mistune==0.7.4
+mistune==2.0.3
 mock==2.0.0
 mpmath==0.19
 msgpack-numpy==0.4.1
